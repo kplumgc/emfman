@@ -30,14 +30,14 @@
 
   /* ---------- HUD ---------- */
   #hud {
-    width: 100%; display: grid; grid-template-columns: auto 1fr auto; grid-template-rows: auto auto;
+    width: 100%; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-rows: auto auto;
     gap: 6px 12px; align-items: center; padding: 8px 10px;
     background: var(--panel); border: 2px solid var(--lime); border-radius: 8px;
     box-shadow: 0 0 14px rgba(200,218,44,.25), inset 0 0 18px rgba(200,218,44,.06);
     font-size: 11px;
   }
   #hud .brand img { height: 30px; display: block; }
-  #hud .stats { display: flex; justify-content: center; gap: 1.6em; flex-wrap: wrap; }
+  #hud .stats { display: flex; justify-content: center; gap: 1.2em; white-space: nowrap; }
   #hud .lbl { color: var(--lime); }
   #hud .lives { display: flex; align-items: center; gap: .8em; }
   #lives { height: 30px; image-rendering: pixelated; }
@@ -76,7 +76,7 @@
     display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 14px 16px 10px;
     border: 2px solid #2a3115; border-radius: 6px; cursor: pointer; background: #0b0f09; color: var(--muted);
   }
-  .choice canvas {
+  .choice canvas, .portrait {
     width: 168px; height: auto; image-rendering: pixelated;
     background: radial-gradient(circle at 50% 40%, #1c2610, #0b0f09 70%); border-radius: 4px;
   }
@@ -90,6 +90,16 @@
   .overlay a:hover { text-decoration: underline; }
   .visit { font-size: 1.5em; margin-top: 10px; text-shadow: 0 0 10px rgba(200,218,44,.6); }
   .bigscore { font-size: 1.6em; }
+  #congrats { background: rgba(4,6,5,.7); }
+  #congrats .card {
+    display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 22px 30px 18px;
+    background: var(--panel); border: 2px solid var(--lime); border-radius: 10px;
+    box-shadow: 0 0 24px rgba(200,218,44,.45), inset 0 0 22px rgba(200,218,44,.08);
+  }
+  #congrats .logo-big { width: 300px; }
+  #congrats h1 { font-size: 2.2em; }
+  #congrats .portrait { border: 2px solid var(--lime); }
+  #congrats .who { color: #7df9ff; }
 </style>
 </head>
 <body>
@@ -126,6 +136,17 @@
       <p class="blink">PRESS ENTER OR TAP TO START</p>
       <p class="keys">ARROWS/WASD MOVE &middot; P PAUSE &middot; Q QUIT &middot; M MUTE</p>
       <a href="https://saferemf.com.au" target="_blank" rel="noopener">saferemf.com.au</a>
+    </div>
+
+    <div id="congrats" class="overlay hidden">
+      <div class="card">
+        <img class="logo logo-big" alt="SaferEMF">
+        <h1>CONGRATULATIONS!</h1>
+        <canvas width="144" height="156" id="clearPortrait" class="portrait"></canvas>
+        <p class="who"><span id="clearName">EMF MAN</span> CLEARED LEVEL <span id="clearLevel">1</span></p>
+        <p>BONUS <span class="lbl" style="color:var(--lime)">+<span id="clearBonus">500</span></span> &middot; SCORE <span id="clearScore">0</span></p>
+        <p class="blink">PRESS ENTER OR TAP FOR LEVEL <span id="clearNext">2</span></p>
+      </div>
     </div>
 
     <div id="over" class="overlay hidden">
@@ -765,6 +786,23 @@ function saveHi() {
   if (score > hi) { hi = score; try { localStorage.setItem('emfman-hi', String(hi)); } catch (e) {} }
 }
 
+function showCongrats() {
+  state = 'congrats';
+  drawPortrait($('clearPortrait'), charKey);
+  $('clearName').textContent = CHARS[charKey].name;
+  $('clearLevel').textContent = level;
+  $('clearBonus').textContent = 500 * level;
+  $('clearScore').textContent = score;
+  $('clearNext').textContent = level + 1;
+  $('congrats').classList.remove('hidden');
+  Sound.extra();
+}
+
+function continueFromCongrats() {
+  $('congrats').classList.add('hidden');
+  nextLevel();
+}
+
 function quitToTitle() {
   saveHi();
   Sound.humStop();
@@ -772,6 +810,7 @@ function quitToTitle() {
   buildMaze(); resetRound(); particles = [];
   state = 'title';
   document.getElementById('over').classList.add('hidden');
+  document.getElementById('congrats').classList.add('hidden');
   document.getElementById('title').classList.remove('hidden');
   drawLives();
 }
@@ -960,7 +999,7 @@ function update(dt) {
     }
   } else if (state === 'clear') {
     clearTimer -= dt;
-    if (clearTimer <= 0) nextLevel();
+    if (clearTimer <= 0) showCongrats();
   }
   // meter reading eases toward the field strength with a bit of live jitter
   const target = intensity > 0 ? 0.05 + 1999 * Math.pow(intensity, 2.3)
@@ -1239,12 +1278,12 @@ function updateHud() {
 }
 function drawLives() {
   const c = $('lives'), g = c.getContext('2d');
-  g.clearRect(0, 0, c.width, c.height);
+  c.width = Math.max(1, Math.min(lives, 6)) * 26 + (lives > 6 ? 16 : 0);   // resizing also clears
   g.imageSmoothingEnabled = false;
   const n = Math.min(lives, 6);
   const head = mkCanvas(24, 26); drawPortrait(head, charKey);
   for (let i = 0; i < n; i++) g.drawImage(head, 0, 0, 24, 20, i * 26, 1, 24, 20);
-  if (lives > 6) { g.fillStyle = LIME; g.font = '8px monospace'; g.fillText('+' + (lives - 6), 6 * 26 - 14, 14); }
+  if (lives > 6) { g.fillStyle = LIME; g.font = '8px monospace'; g.fillText('+' + (lives - 6), 6 * 26, 14); }
 }
 
 // ===================== Title screen =====================
@@ -1276,6 +1315,7 @@ const KEYMAP = {
 };
 function tryStart() {
   if (state === 'title' || state === 'over') { startGame(); return true; }
+  if (state === 'congrats') { continueFromCongrats(); return true; }
   return false;
 }
 window.addEventListener('keydown', e => {
@@ -1285,7 +1325,7 @@ window.addEventListener('keydown', e => {
   if (state === 'title' && (e.code === 'ArrowRight' || e.code === 'KeyD')) { selectChar('woman'); return; }
   if (e.code === 'Enter' || e.code === 'Space') { if (tryStart()) return; }
   if (e.code === 'KeyM') { Sound.toggleMute(); return; }
-  if (e.code === 'KeyQ' && ['ready', 'play', 'dying', 'clear'].includes(state)) { quitToTitle(); return; }
+  if (e.code === 'KeyQ' && ['ready', 'play', 'dying', 'clear', 'congrats'].includes(state)) { quitToTitle(); return; }
   if ((e.code === 'KeyP' || e.code === 'Escape') && ['ready', 'play', 'dying', 'clear'].includes(state)) {
     paused = !paused; if (paused) Sound.humStop(); else if (hatTimer > 0) Sound.humStart(); return;
   }
@@ -1302,7 +1342,7 @@ window.addEventListener('touchmove', e => {
     touch0 = [t.clientX, t.clientY];
   }
 }, { passive: true });
-for (const id of ['title', 'over']) $(id).addEventListener('click', () => { Sound.init(); tryStart(); });
+for (const id of ['title', 'over', 'congrats']) $(id).addEventListener('click', () => { Sound.init(); tryStart(); });
 document.querySelectorAll('.overlay a').forEach(a => a.addEventListener('click', e => e.stopPropagation()));
 document.addEventListener('visibilitychange', () => {
   if (document.hidden && ['ready', 'play'].includes(state)) { paused = true; Sound.humStop(); }
