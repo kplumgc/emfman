@@ -58,8 +58,8 @@
   }
   #hud .meter .mlbl { font-size: .75em; color: #333; }
   #lcd { background: #a9b98a; color: #12180c; padding: .25em .4em; min-width: 5.2em; text-align: right; letter-spacing: .05em; border: 1px solid #556; transition: background .25s; }
-  #lcd.warn { background: #ff9a2e; }
-  #lcd.danger { background: #ff3b30; color: #fff; }
+  #lcd.warn, #lcd2.warn { background: #ff9a2e; }
+  #lcd.danger, #lcd2.danger { background: #ff3b30; color: #fff; }
   #hud .meter .unit { font-size: .75em; }
 
   /* ---------- Stage + overlays ---------- */
@@ -121,11 +121,28 @@
 
   /* ---------- Touch pause button (real screen pixels, outside the scaled game) ---------- */
   #controls {
-    position: absolute; display: none; align-items: center; justify-content: center; gap: 22px;
-    pointer-events: none; z-index: 5;
+    position: absolute; display: none; align-items: flex-start; justify-content: flex-start; gap: 12px;
+    padding-top: 8px; pointer-events: none; z-index: 5;
   }
   #controls.on { display: flex; }
-  #controls.floating { opacity: .6; align-items: flex-end; justify-content: flex-end; }
+  #controls.floating { opacity: .75; align-items: flex-end; padding-top: 0; }
+  /* phones: a big meter panel directly under the header (design pixels, scaled with the game) */
+  #phoneMeter {
+    display: flex; align-items: center; justify-content: center; gap: 18px; padding: 12px 16px;
+    background: #f2f2ec; color: #222; border: 2px solid var(--lime); border-radius: 8px;
+    font-size: 20px; white-space: nowrap;
+  }
+  #lcd2 {
+    background: #a9b98a; color: #12180c; font-size: 44px; padding: 10px 14px; min-width: 5em; text-align: right;
+    border: 2px solid #556; transition: background .25s;
+  }
+  /* phones: the meter lives below the maze at full size instead of in the scaled header */
+  html.touch #hud .meter { display: none; }
+  /* phones: crisper title text once the screen is scaled down */
+  html.touch .overlay h1 { text-shadow: 3px 3px 0 #2b3108; }
+  html.touch .choice { font-size: 20px; }
+  html.touch #title { gap: 9px; }
+  html.touch #title .logo-big { width: 52%; }
   #controls > * { pointer-events: auto; }
   .cbtn {
     width: 56px; height: 56px; border-radius: 50%; border: 2px solid var(--lime); padding: 0;
@@ -153,6 +170,7 @@
     <div class="health"><span class="lbl" id="hlbl">HEALTH</span><div class="bar"><div id="hbar"></div></div>
     <div class="meter"><span class="mlbl">EMF METER</span><span id="lcd">0.00</span><span class="unit">µW/m²</span></div></div>
   </header>
+  <div id="phoneMeter" class="touch-only"><span>EMF METER</span><span id="lcd2">0.00</span><span>µW/m²</span></div>
 
   <div id="stage">
     <canvas id="game"></canvas>
@@ -1312,7 +1330,7 @@ function draw() {
 
 // ===================== HUD =====================
 const $ = id => document.getElementById(id);
-const hud = { score: $('score'), hi: $('hi'), lvl: $('lvl'), hbar: $('hbar'), hlbl: $('hlbl'), lcd: $('lcd') };
+const hud = { score: $('score'), hi: $('hi'), lvl: $('lvl'), hbar: $('hbar'), hlbl: $('hlbl'), lcd: $('lcd'), lcd2: $('lcd2') };
 let lastHud = {};
 function setText(el, key, v) { if (lastHud[key] !== v) { lastHud[key] = v; el.textContent = v; } }
 function fmtReading(r) {
@@ -1327,7 +1345,8 @@ function updateHud() {
   setText(hud.lvl, 'lvl', String(level));
   setText(hud.lcd, 'lcd', fmtReading(reading));
   const lcdLevel = reading >= 500 ? 'danger' : reading >= 50 ? 'warn' : '';
-  if (lastHud.lcdLevel !== lcdLevel) { lastHud.lcdLevel = lcdLevel; hud.lcd.className = lcdLevel; }
+  setText(hud.lcd2, 'lcd2', fmtReading(reading));
+  if (lastHud.lcdLevel !== lcdLevel) { lastHud.lcdLevel = lcdLevel; hud.lcd.className = hud.lcd2.className = lcdLevel; }
   const foil = hatTimer > 0;
   setText(hud.hlbl, 'hlbl', foil ? 'FOIL HAT' : 'HEALTH');
   hud.hbar.classList.toggle('foil', foil);
@@ -1449,8 +1468,8 @@ function resize() {
     // phones: game pinned to the top; the pause button sits in the space below it,
     // or floats over the bottom-right corner when there's no room
     top = sa.t + pad;
-    const room = spare >= 72;
-    const h = room ? spare : 64;
+    const room = spare >= 80;
+    const h = room ? spare : 72;
     Object.assign(ctl.style, { left: (sa.l + pad) + 'px', width: aw + 'px', height: h + 'px',
       top: (room ? top + gh : vh - sa.b - pad - h) + 'px' });
     ctl.classList.toggle('floating', !room);
