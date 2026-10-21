@@ -25,8 +25,9 @@
     overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none;
     overscroll-behavior: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent;
   }
-  /* device-specific text: html.touch is set by the script on phones/tablets */
-  html:not(.touch) .touch-only, html.touch .key-only { display: none !important; }
+  /* html.touch: touch is the main input (phones, iPads) -> touch buttons/hints.
+     html.phone: a touch device with a small screen -> compact phone layout. Both set by the script. */
+  html:not(.touch) .touch-only, html.touch .key-only, html:not(.phone) .phone-only { display: none !important; }
   #safe {
     position: fixed; visibility: hidden; pointer-events: none;
     padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
@@ -74,7 +75,12 @@
   .overlay .logo-big { width: 60%; max-width: 400px; }
   .overlay h1 {
     font-size: 3.6em; color: var(--lime); letter-spacing: .06em;
-    text-shadow: 0 0 10px rgba(200,218,44,.7), 4px 4px 0 #2b3108;
+    text-shadow:
+      0 0 12px rgba(200,218,44,.55),
+      .025em .025em 0 #b0c226, .050em .050em 0 #a3b323, .075em .075em 0 #95a520, .100em .100em 0 #88961d,
+      .125em .125em 0 #7b881a, .150em .150em 0 #6e7917, .175em .175em 0 #606b14, .200em .200em 0 #535c11,
+      .225em .225em 0 #464e0e, .250em .250em 0 #393f0b, .275em .275em 0 #2b3108, .300em .300em 0 #1e2205,
+      .36em .36em .42em rgba(0,0,0,.85);
   }
   .overlay h2 { font-size: 3em; color: #ff4b4b; text-shadow: 0 0 12px rgba(255,75,75,.6), 4px 4px 0 #3a0a0a; }
   .overlay .sub { color: var(--muted); }
@@ -137,24 +143,24 @@
     border: 2px solid #556; transition: background .25s;
   }
   /* phones: the meter lives below the maze at full size instead of in the scaled header */
-  html.touch #hud .meter { display: none; }
+  html.phone #hud .meter { display: none; }
   /* phones: health bar the same height as the meter panel below it */
-  html.touch #hud .bar { height: 52px; }
-  html.touch #hud #hlbl { font-size: 18px; }
+  html.phone #hud .bar { height: 52px; }
+  html.phone #hud #hlbl { font-size: 18px; }
   /* phones: bigger scores on their own row (logo + lives / scores / health) */
-  html.touch #hud {
+  html.phone #hud {
     grid-template-columns: auto 1fr; grid-template-areas: "brand lives" "stats stats" "health health";
   }
-  html.touch #hud .brand { grid-area: brand; }
-  html.touch #hud .lives { grid-area: lives; justify-self: end; font-size: 16px; }
-  html.touch #hud .stats { grid-area: stats; justify-content: space-around; font-size: 18px; }
-  html.touch #hud .health { grid-area: health; }
-  html.touch #lives { height: 36px; }
+  html.phone #hud .brand { grid-area: brand; }
+  html.phone #hud .lives { grid-area: lives; justify-self: end; font-size: 16px; }
+  html.phone #hud .stats { grid-area: stats; justify-content: space-around; font-size: 18px; }
+  html.phone #hud .health { grid-area: health; }
+  html.phone #lives { height: 36px; }
   /* phones: crisper title text once the screen is scaled down */
-  html.touch .overlay h1 { text-shadow: 3px 3px 0 #2b3108; }
-  html.touch .choice { font-size: 20px; }
-  html.touch #title { gap: 9px; }
-  html.touch #title .logo-big { width: 52%; }
+  html.phone .overlay h1 { text-shadow: 3px 3px 0 #2b3108; }
+  html.phone .choice { font-size: 20px; }
+  html.phone #title { gap: 9px; }
+  html.phone #title .logo-big { width: 52%; }
   #controls > * { pointer-events: auto; }
   .cbtn {
     width: 56px; height: 56px; border-radius: 50%; border: 2px solid var(--lime); padding: 0;
@@ -182,7 +188,7 @@
     <div class="health"><span class="lbl" id="hlbl">HEALTH</span><div class="bar"><div id="hbar"></div></div>
     <div class="meter"><span class="mlbl">EMF METER</span><span id="lcd">0.00</span><span class="unit">µW/m²</span></div></div>
   </header>
-  <div id="phoneMeter" class="touch-only"><span>EMF METER</span><span id="lcd2">0.00</span><span>µW/m²</span></div>
+  <div id="phoneMeter" class="phone-only"><span>EMF METER</span><span id="lcd2">0.00</span><span>µW/m²</span></div>
 
   <div id="stage">
     <canvas id="game"></canvas>
@@ -1402,6 +1408,9 @@ function drawTitleArt() {
 // ===================== Input =====================
 const IS_TOUCH = (window.matchMedia && matchMedia('(pointer: coarse)').matches) || navigator.maxTouchPoints > 0;
 if (IS_TOUCH) document.documentElement.classList.add('touch');
+// phones get the compact layout; iPads and computers have room for the full-size one
+const IS_PHONE = IS_TOUCH && Math.min(screen.width, screen.height) < 500;
+if (IS_PHONE) document.documentElement.classList.add('phone');
 const PAUSABLE = ['ready', 'play', 'dying', 'clear'];
 
 function setPaused(p) {
