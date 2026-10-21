@@ -119,32 +119,19 @@
   #pauseMenu h2 { color: var(--lime); text-shadow: 0 0 12px rgba(200,218,44,.6), 4px 4px 0 #2b3108; margin-bottom: 10px; }
   #pauseMenu .menu { display: flex; flex-direction: column; gap: 20px; min-width: 400px; }
 
-  /* ---------- Touch controls (real screen pixels, outside the scaled game) ---------- */
+  /* ---------- Touch pause button (real screen pixels, outside the scaled game) ---------- */
   #controls {
     position: absolute; display: none; align-items: center; justify-content: center; gap: 22px;
     pointer-events: none; z-index: 5;
   }
   #controls.on { display: flex; }
-  #controls.floating { opacity: .55; align-items: flex-end; }
+  #controls.floating { opacity: .6; align-items: flex-end; justify-content: flex-end; }
   #controls > * { pointer-events: auto; }
   .cbtn {
     width: 56px; height: 56px; border-radius: 50%; border: 2px solid var(--lime); padding: 0;
     background: rgba(12,17,13,.9); display: grid; place-items: center; touch-action: manipulation;
   }
   .cbtn svg { width: 26px; height: 26px; fill: var(--lime); stroke: var(--lime); }
-  #btnMute .off, #btnMute.muted .on { display: none; }
-  #btnMute.muted .off { display: inline; }
-  #dpad {
-    position: relative; width: 150px; height: 150px; border-radius: 50%; flex: none;
-    background: rgba(12,17,13,.9); border: 2px solid var(--lime); touch-action: none;
-    box-shadow: 0 0 14px rgba(200,218,44,.25);
-  }
-  #dpad .arm { position: absolute; width: 34%; height: 34%; display: grid; place-items: center; border-radius: 8px; }
-  #dpad .arm svg { width: 60%; height: 60%; fill: var(--lime-dim); }
-  #dpad .arm.on { background: rgba(200,218,44,.25); }
-  #dpad .arm.on svg { fill: var(--lime); }
-  #dpad .up { left: 33%; top: 2%; } #dpad .down { left: 33%; bottom: 2%; }
-  #dpad .left { top: 33%; left: 2%; } #dpad .right { top: 33%; right: 2%; }
   #rotate {
     position: fixed; inset: 0; z-index: 20; display: flex; align-items: center; justify-content: center;
     padding: 24px; text-align: center; line-height: 1.8; font-size: 14px; color: var(--lime); background: var(--bg);
@@ -186,7 +173,7 @@
       <p class="blink key-only">PRESS ENTER OR TAP TO START</p>
       <p class="keys key-only">ARROWS/WASD MOVE &middot; P PAUSE &middot; Q QUIT &middot; M MUTE</p>
       <button class="btn big touch-only" id="startBtn">START</button>
-      <p class="keys touch-only">TAP A PLAYER, THEN START &middot; SWIPE OR USE THE D-PAD</p>
+      <p class="keys touch-only">TAP A PLAYER, THEN START &middot; SWIPE TO MOVE</p>
       <a href="https://saferemf.com.au" target="_blank" rel="noopener">saferemf.com.au</a>
     </div>
 
@@ -228,16 +215,6 @@
  <div id="controls">
   <button class="cbtn" id="btnPause" aria-label="Pause">
     <svg viewBox="0 0 24 24"><rect x="5" y="4" width="5" height="16" rx="1"/><rect x="14" y="4" width="5" height="16" rx="1"/></svg>
-  </button>
-  <div id="dpad" aria-label="Direction pad">
-    <div class="arm up"><svg viewBox="0 0 24 24"><path d="M12 4l9 14H3z"/></svg></div>
-    <div class="arm down"><svg viewBox="0 0 24 24"><path d="M12 20L3 6h18z"/></svg></div>
-    <div class="arm left"><svg viewBox="0 0 24 24"><path d="M4 12l14-9v18z"/></svg></div>
-    <div class="arm right"><svg viewBox="0 0 24 24"><path d="M20 12L6 3v18z"/></svg></div>
-  </div>
-  <button class="cbtn" id="btnMute" aria-label="Sound">
-    <svg class="on" viewBox="0 0 24 24"><path d="M3 9h4l5-4v14l-5-4H3z" stroke="none"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13" fill="none" stroke-width="2" stroke-linecap="round"/></svg>
-    <svg class="off" viewBox="0 0 24 24"><path d="M3 9h4l5-4v14l-5-4H3z" stroke="none"/><path d="M16 9l6 6M22 9l-6 6" fill="none" stroke-width="2" stroke-linecap="round"/></svg>
   </button>
  </div>
 </div>
@@ -1404,7 +1381,6 @@ function setPaused(p) {
 function toggleMute() {
   const m = Sound.toggleMute();
   $('mSound').textContent = m ? 'SOUND: OFF' : 'SOUND: ON';
-  $('btnMute').classList.toggle('muted', m);
 }
 const KEYMAP = {
   ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0],
@@ -1451,29 +1427,8 @@ onTap($('mResume'), () => setPaused(false));
 onTap($('mQuit'), quitToTitle);
 onTap($('mSound'), toggleMute);
 onTap($('btnPause'), () => { if (PAUSABLE.includes(state)) setPaused(!paused); });
-onTap($('btnMute'), toggleMute);
 document.querySelectorAll('.menu-btn').forEach(b => onTap(b, quitToTitle));
 
-// D-pad: direction comes from where the thumb is relative to the pad centre, so sliding between arms works
-const dpad = $('dpad'), arms = { '0,-1': 'up', '0,1': 'down', '-1,0': 'left', '1,0': 'right' };
-function dpadTouch(e) {
-  e.preventDefault(); e.stopPropagation();
-  const t = e.targetTouches[0]; if (!t) return;
-  const r = dpad.getBoundingClientRect();
-  const dx = t.clientX - (r.left + r.width / 2), dy = t.clientY - (r.top + r.height / 2);
-  if (Math.hypot(dx, dy) < r.width * 0.12) return;
-  const d = Math.abs(dx) > Math.abs(dy) ? [Math.sign(dx), 0] : [0, Math.sign(dy)];
-  if (player) player.want = d;
-  for (const a of dpad.querySelectorAll('.arm')) a.classList.toggle('on', a.classList.contains(arms[d.join()]));
-}
-function dpadRelease(e) {
-  e.stopPropagation();
-  if (!e.targetTouches.length) for (const a of dpad.querySelectorAll('.arm')) a.classList.remove('on');
-}
-dpad.addEventListener('touchstart', dpadTouch, { passive: false });
-dpad.addEventListener('touchmove', dpadTouch, { passive: false });
-dpad.addEventListener('touchend', dpadRelease);
-dpad.addEventListener('touchcancel', dpadRelease);
 
 // ===================== Layout + loop =====================
 function safeInsets() {
@@ -1491,22 +1446,14 @@ function resize() {
   const gw = dw * s, gh = dh * s, spare = ah - gh;
   let top = sa.t + pad + spare / 2;
   if (IS_TOUCH) {
-    const x = sa.l + pad;
-    if (spare >= 120) {
-      // phone portrait: game pinned to the top, controls fill the unused space underneath
-      top = sa.t + pad;
-      const size = Math.min(180, spare - 16, aw - 2 * (56 + 22));
-      Object.assign(ctl.style, { left: x + 'px', width: aw + 'px', top: (top + gh) + 'px', height: spare + 'px' });
-      $('dpad').style.width = $('dpad').style.height = size + 'px';
-      ctl.classList.remove('floating');
-    } else {
-      // no spare room: game still pinned to the top, controls float translucently over the bottom
-      top = sa.t + pad;
-      const size = 124;
-      Object.assign(ctl.style, { left: x + 'px', width: aw + 'px', top: (vh - sa.b - pad - size) + 'px', height: size + 'px' });
-      $('dpad').style.width = $('dpad').style.height = size + 'px';
-      ctl.classList.add('floating');
-    }
+    // phones: game pinned to the top; the pause button sits in the space below it,
+    // or floats over the bottom-right corner when there's no room
+    top = sa.t + pad;
+    const room = spare >= 72;
+    const h = room ? spare : 64;
+    Object.assign(ctl.style, { left: (sa.l + pad) + 'px', width: aw + 'px', height: h + 'px',
+      top: (room ? top + gh : vh - sa.b - pad - h) + 'px' });
+    ctl.classList.toggle('floating', !room);
   }
   root.style.transform = `scale(${s})`;
   root.style.left = (sa.l + pad + (aw - gw) / 2) + 'px';
