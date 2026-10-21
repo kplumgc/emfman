@@ -128,19 +128,28 @@
   #controls.floating { opacity: .75; align-items: flex-end; padding-top: 0; }
   /* phones: a big meter panel directly under the header (design pixels, scaled with the game) */
   #phoneMeter {
-    display: flex; align-items: center; justify-content: center; gap: 18px; height: 72px; padding: 0 16px;
+    display: flex; align-items: center; justify-content: center; gap: 18px; height: 52px; padding: 0 16px;
     background: #f2f2ec; color: #222; border: 2px solid var(--lime); border-radius: 8px;
     font-size: 20px; white-space: nowrap;
   }
   #lcd2 {
-    background: #a9b98a; color: #12180c; font-size: 36px; padding: 6px 12px; min-width: 5em; text-align: right;
+    background: #a9b98a; color: #12180c; font-size: 28px; padding: 4px 10px; min-width: 5em; text-align: right;
     border: 2px solid #556; transition: background .25s;
   }
   /* phones: the meter lives below the maze at full size instead of in the scaled header */
   html.touch #hud .meter { display: none; }
   /* phones: health bar the same height as the meter panel below it */
-  html.touch #hud .bar { height: 72px; }
-  html.touch #hud #hlbl { font-size: 20px; }
+  html.touch #hud .bar { height: 52px; }
+  html.touch #hud #hlbl { font-size: 18px; }
+  /* phones: bigger scores on their own row (logo + lives / scores / health) */
+  html.touch #hud {
+    grid-template-columns: auto 1fr; grid-template-areas: "brand lives" "stats stats" "health health";
+  }
+  html.touch #hud .brand { grid-area: brand; }
+  html.touch #hud .lives { grid-area: lives; justify-self: end; font-size: 16px; }
+  html.touch #hud .stats { grid-area: stats; justify-content: space-around; font-size: 18px; }
+  html.touch #hud .health { grid-area: health; }
+  html.touch #lives { height: 36px; }
   /* phones: crisper title text once the screen is scaled down */
   html.touch .overlay h1 { text-shadow: 3px 3px 0 #2b3108; }
   html.touch .choice { font-size: 20px; }
