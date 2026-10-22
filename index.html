@@ -103,6 +103,33 @@
   .overlay a:hover { text-decoration: underline; }
   .visit { font-size: 1.5em; margin-top: 10px; text-shadow: 0 0 10px rgba(200,218,44,.6); }
   .bigscore { font-size: 1.6em; }
+
+  /* ---------- Leaderboard ---------- */
+  .overlay .hidden { display: none !important; }
+  #over.with-board { gap: 8px; }
+  #over.with-board .logo-big { width: 28% !important; }
+  #over.with-board h2 { font-size: 2.2em; }
+  .board { min-width: 520px; padding: 8px 14px; background: var(--panel); border: 2px solid var(--lime); border-radius: 8px; box-shadow: 0 0 12px rgba(200,218,44,.3); }
+  .board h3 { color: var(--lime); font-size: 1em; font-weight: normal; margin-bottom: 4px; text-shadow: 0 0 8px rgba(200,218,44,.6); }
+  .board table { width: 100%; border-collapse: collapse; line-height: 1.7; }
+  .board th { color: var(--muted); font-weight: normal; font-size: .8em; }
+  .board td, .board th { padding: 0 8px; text-align: right; white-space: nowrap; }
+  .board td.name, .board th.name { text-align: left; max-width: 20ch; overflow: hidden; text-overflow: ellipsis; }
+  .board tr.me td { color: var(--lime); text-shadow: 0 0 8px rgba(200,218,44,.7); }
+  .board .empty { color: var(--muted); padding: 6px 0; }
+  .board.compact { font-size: 9px; padding: 4px 12px 6px; margin: -6px 0; }
+  .board.compact h3 { margin-bottom: 2px; }
+  .board.compact table { line-height: 1.4; }
+  .name-entry { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .new-top { color: #7df9ff; }
+  .name-row { display: flex; gap: 8px; align-items: center; }
+  #nameInput {
+    font: inherit; font-size: 14px; width: 21ch; padding: 10px 12px; text-transform: uppercase;
+    color: var(--lime); background: #0a0d08; border: 2px solid var(--lime); border-radius: 6px; outline: none;
+  }
+  #nameInput:focus { box-shadow: 0 0 10px rgba(200,218,44,.6); }
+  .name-row .btn { font-size: 12px; padding: 10px 14px; }
+  .board-msg { color: #ffc93c; }
   #congrats { background: rgba(4,6,5,.7); }
   #congrats .card {
     display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 22px 30px 18px;
@@ -206,8 +233,9 @@
         <canvas width="36" height="36" id="lgHat"></canvas><span>FOIL HAT = PROTECTION TO ATTACK TOWERS</span>
         <canvas width="36" height="36" id="lgTower"></canvas><span>TOWERS ZAP YOU. CLOSER = WORSE</span>
       </div>
+      <div id="titleBoard" class="board compact hidden"></div>
       <p class="blink key-only">PRESS ENTER OR TAP TO START</p>
-      <p class="keys key-only">ARROWS/WASD MOVE &middot; P PAUSE &middot; Q QUIT &middot; M MUTE</p>
+      <p class="keys key-only">ARROWS/WASD MOVE &middot; P PAUSE &middot; Q QUIT &middot; M MUTE &middot; L SCORES</p>
       <button class="btn big touch-only" id="startBtn">START</button>
       <p class="keys touch-only">TAP A PLAYER, THEN START &middot; SWIPE TO MOVE</p>
       <a href="https://saferemf.com.au" target="_blank" rel="noopener">saferemf.com.au</a>
@@ -230,7 +258,17 @@
       <h2>GAME OVER</h2>
       <p class="bigscore">SCORE <span id="finalScore">0</span></p>
       <p>HI SCORE <span id="finalHi">0</span></p>
-      <p class="blink">PRESS ENTER OR TAP TO PLAY AGAIN</p>
+      <form id="nameEntry" class="name-entry hidden" autocomplete="off">
+        <p class="new-top">NEW TOP 10 SCORE! ENTER YOUR NAME</p>
+        <div class="name-row">
+          <input id="nameInput" maxlength="20" placeholder="YOUR NAME" enterkeyhint="done" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false">
+          <button class="btn" type="submit" id="nameSave">SAVE</button>
+          <button class="btn ghost" type="button" id="nameSkip">SKIP</button>
+        </div>
+      </form>
+      <p id="boardMsg" class="board-msg hidden"></p>
+      <div id="overBoard" class="board hidden"></div>
+      <p class="blink" id="overPrompt">PRESS ENTER OR TAP TO PLAY AGAIN</p>
       <button class="btn ghost menu-btn">MAIN MENU</button>
       <a class="visit" href="https://saferemf.com.au" target="_blank" rel="noopener">Visit saferemf.com.au</a>
     </div>
@@ -876,6 +914,7 @@ function startGame() {
   resetRound();
   particles = [];
   state = 'ready'; readyTimer = 2.4; paused = false;
+  Board.start();
   Sound.start();
   document.getElementById('title').classList.add('hidden');
   document.getElementById('over').classList.add('hidden');
@@ -893,6 +932,121 @@ function nextLevel() {
 function saveHi() {
   if (score > hi) { hi = score; try { localStorage.setItem('emfman-hi', String(hi)); } catch (e) {} }
 }
+
+// ===================== Global leaderboard =====================
+// Talks to the /api functions. Every failure is soft: the game never waits on or breaks because of it.
+const Board = (() => {
+  let list = null, token = null, naming = false, pending = null;
+  const DATE_FMT = { day: '2-digit', month: '2-digit', year: 'numeric' };
+
+  async function api(path, body) {
+    const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 5000);
+    try {
+      const r = await fetch('/api/' + path, body
+        ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: ctl.signal }
+        : { signal: ctl.signal, cache: 'no-store' });
+      let data = null;
+      try { data = await r.json(); } catch (e) {}
+      return { ok: r.ok, status: r.status, data };
+    } catch (e) {
+      return { ok: false, status: 0, data: null };
+    } finally { clearTimeout(timer); }
+  }
+
+  async function load() {
+    const r = await api('leaderboard');
+    if (r.ok && Array.isArray(r.data)) list = r.data;
+    return list;
+  }
+
+  function start() {
+    token = null;
+    api('start-game', {}).then(r => { if (r.ok && r.data && r.data.token) token = r.data.token; });
+  }
+
+  function qualifies(s) {
+    return !!list && s > 0 && (list.length < 10 || s > list[list.length - 1].score);
+  }
+
+  // Builds the table with textContent only, so player names are always plain text.
+  function render(el, highlightId) {
+    el.replaceChildren();
+    const h = document.createElement('h3'); h.textContent = 'HIGH SCORES'; el.appendChild(h);
+    if (!list || !list.length) {
+      const p = document.createElement('p'); p.className = 'empty'; p.textContent = 'NO SCORES YET. BE THE FIRST!';
+      el.appendChild(p); return;
+    }
+    const table = document.createElement('table');
+    const row = (cells, tag, cls) => {
+      const tr = document.createElement('tr');
+      if (cls) tr.className = cls;
+      cells.forEach(([text, c]) => { const td = document.createElement(tag); td.textContent = text; if (c) td.className = c; tr.appendChild(td); });
+      table.appendChild(tr);
+    };
+    row([['#'], ['NAME', 'name'], ['SCORE'], ['LV'], ['DATE']], 'th');
+    list.forEach((e, i) => row([
+      [String(i + 1)], [e.player_name, 'name'], [String(e.score)], [String(e.level)],
+      [new Date(e.created_at).toLocaleDateString('en-AU', DATE_FMT)],
+    ], 'td', e.id === highlightId ? 'me' : ''));
+    el.appendChild(table);
+  }
+
+  // ---- game-over screen ----
+  function msg(text) { $('boardMsg').textContent = text || ''; $('boardMsg').classList.toggle('hidden', !text); }
+  function showBoard(highlightId) {
+    const ok = !!list;
+    $('overBoard').classList.toggle('hidden', !ok);
+    $('over').classList.toggle('with-board', ok || naming);
+    if (ok) render($('overBoard'), highlightId);
+  }
+  function setNaming(on) {
+    naming = on;
+    $('nameEntry').classList.toggle('hidden', !on);
+    $('overPrompt').classList.toggle('hidden', on);
+    if (!on) $('nameInput').blur();
+  }
+
+  async function gameOver(finalScore, finalLevel) {
+    pending = { score: finalScore, level: finalLevel };
+    setNaming(false); msg(''); showBoard();
+    await load();
+    if (state !== 'over') return;
+    if (!list) { if (finalScore > 0) msg('LEADERBOARD OFFLINE'); showBoard(); return; }
+    if (qualifies(finalScore)) {
+      if (!token) { msg('LEADERBOARD OFFLINE: YOUR SCORE COULDN\'T BE SAVED'); showBoard(); return; }
+      let last = '';
+      try { last = localStorage.getItem('emfman-name') || ''; } catch (e) {}
+      $('nameInput').value = last;
+      setNaming(true); showBoard();
+      if (!IS_TOUCH) $('nameInput').focus();
+      return;
+    }
+    showBoard();
+  }
+
+  async function submit() {
+    if (!naming || !pending) return;
+    const name = $('nameInput').value.trim().replace(/\s+/g, ' ').toUpperCase();
+    if (!name) { msg('PLEASE TYPE YOUR NAME'); return; }
+    $('nameSave').disabled = true; msg('SAVING...');
+    const r = await api('submit-score', { player_name: name, score: pending.score, level: pending.level, token });
+    $('nameSave').disabled = false;
+    if (state !== 'over') return;
+    if (r.ok && r.data) {
+      try { localStorage.setItem('emfman-name', name); } catch (e) {}
+      list = r.data.top10; token = null;
+      setNaming(false); msg('SCORE SAVED!'); showBoard(r.data.id);
+      return;
+    }
+    const err = r.data && r.data.error ? r.data.error.toUpperCase() : 'LEADERBOARD OFFLINE: YOUR SCORE COULDN\'T BE SAVED';
+    if (r.data && r.data.field === 'name') { msg(err); $('nameInput').focus(); return; }
+    setNaming(false); msg(err); showBoard();
+  }
+
+  function skip() { setNaming(false); msg(''); showBoard(); }
+
+  return { load, start, render, gameOver, submit, skip, get naming() { return naming; }, get list() { return list; } };
+})();
 
 function showCongrats() {
   state = 'congrats';
@@ -921,6 +1075,7 @@ function quitToTitle() {
   document.getElementById('congrats').classList.add('hidden');
   document.getElementById('pauseMenu').classList.add('hidden');
   document.getElementById('title').classList.remove('hidden');
+  showTitleInfo(false); Board.load();
   drawLives();
 }
 
@@ -931,6 +1086,7 @@ function gameOver() {
   document.getElementById('finalScore').textContent = score;
   document.getElementById('finalHi').textContent = hi;
   document.getElementById('over').classList.remove('hidden');
+  Board.gameOver(score, level);
 }
 
 function addScore(n) {
@@ -1413,6 +1569,19 @@ function drawTitleArt() {
   drawTower(g, 0, 0, { t: time, idx: 0, color: '#ff3b3b', lookX: Math.sin(time), lookY: 0 });
   g.restore();
 }
+// attract mode: the title screen alternates between the instructions and the high scores
+let titleShowsBoard = false, titleSwitchedAt = 0;
+function showTitleInfo(board) {
+  titleSwitchedAt = performance.now();
+  titleShowsBoard = board && !!Board.list;
+  if (titleShowsBoard) Board.render($('titleBoard'));
+  $('titleBoard').classList.toggle('hidden', !titleShowsBoard);
+  document.querySelector('#title .legend').classList.toggle('hidden', titleShowsBoard);
+}
+setInterval(() => {
+  if (state === 'title' && performance.now() - titleSwitchedAt >= 6000) showTitleInfo(!titleShowsBoard);
+}, 500);
+Board.load();
 
 // ===================== Input =====================
 const IS_TOUCH = (window.matchMedia && matchMedia('(pointer: coarse)').matches) || navigator.maxTouchPoints > 0;
@@ -1436,15 +1605,18 @@ const KEYMAP = {
   KeyW: [0, -1], KeyS: [0, 1], KeyA: [-1, 0], KeyD: [1, 0],
 };
 function tryStart() {
+  if (state === 'over' && Board.naming) return false;
   if (state === 'title' || state === 'over') { startGame(); return true; }
   if (state === 'congrats') { continueFromCongrats(); return true; }
   return false;
 }
 window.addEventListener('keydown', e => {
   Sound.init();
+  if (e.target === $('nameInput')) return;   // typing a name: no game shortcuts (Enter submits the form)
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault();
   if (state === 'title' && (e.code === 'ArrowLeft' || e.code === 'KeyA')) { selectChar('man'); return; }
   if (state === 'title' && (e.code === 'ArrowRight' || e.code === 'KeyD')) { selectChar('woman'); return; }
+  if (state === 'title' && e.code === 'KeyL') { showTitleInfo(!titleShowsBoard); return; }
   if (e.code === 'Enter' || e.code === 'Space') { if (tryStart()) return; }
   if (e.code === 'KeyM') { toggleMute(); return; }
   if (e.code === 'KeyQ' && ['ready', 'play', 'dying', 'clear', 'congrats'].includes(state)) { quitToTitle(); return; }
@@ -1477,6 +1649,9 @@ onTap($('mQuit'), quitToTitle);
 onTap($('mSound'), toggleMute);
 onTap($('btnPause'), () => { if (PAUSABLE.includes(state)) setPaused(!paused); });
 document.querySelectorAll('.menu-btn').forEach(b => onTap(b, quitToTitle));
+$('nameEntry').addEventListener('submit', e => { e.preventDefault(); Board.submit(); });
+$('nameEntry').addEventListener('click', e => e.stopPropagation());
+onTap($('nameSkip'), () => Board.skip());
 
 
 // ===================== Layout + loop =====================
