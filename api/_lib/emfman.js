@@ -63,7 +63,7 @@ const BLOCK_ANYWHERE = [
 const BLOCK_WORD = [
   'ass', 'arse', 'asshole', 'arsehole', 'dick', 'cock', 'prick', 'tit', 'tits', 'cum', 'fag', 'rape',
   'rapist', 'nazi', 'sex', 'anal', 'anus', 'piss', 'penis', 'vagina', 'boob', 'boobs', 'crap', 'poo',
-  'poop', 'turd', 'homo', 'coon', 'paki', 'chink', 'spic', 'wog', 'dyke', 'tranny', 'kkk',
+  'poop', 'turd', 'fart', 'farts', 'homo', 'coon', 'paki', 'chink', 'spic', 'wog', 'dyke', 'tranny', 'kkk',
 ];
 const BLOCK_WORD_SET = new Set(BLOCK_WORD);
 
