@@ -272,6 +272,7 @@ const CONTACT_DMG = 15;           // health lost per hard zap when touching a to
 const CONTACT_COOLDOWN = 0.5;     // seconds between contact zaps
 const RESPAWN_DELAY = 3;          // seconds a knocked-down tower waits in the box
 const HAT_WARN = 2.5;             // seconds before the hat expires that towers flash
+const GAME_SPEED = 0.9;          // global movement speed multiplier
 const EXIT = [13, 11], HOME = [13, 14];
 const START = [13, 23];
 const DIRS = [[0, -1], [-1, 0], [0, 1], [1, 0]];
@@ -694,8 +695,16 @@ function drawTower(c, cx, cy, o) {
   }
   c.stroke();
   // panel antennas
-  c.fillStyle = o.fright ? steel : '#eef1f4';
-  c.fillRect(cx - 8, cy - 23, 3, 8); c.fillRect(cx - 1.5, cy - 25, 3, 10); c.fillRect(cx + 5, cy - 23, 3, 8);
+  c.strokeStyle = steel; c.lineWidth = 1.5;
+  c.beginPath(); c.moveTo(cx - 14, cy - 19); c.lineTo(cx + 14, cy - 19); c.stroke();
+  c.lineWidth = 1;
+  for (const [px, py, ph] of [[cx - 14, cy - 26, 15], [cx + 10, cy - 26, 15], [cx - 2, cy - 25, 8]]) {
+    c.fillStyle = o.fright ? steel : '#e8e4d8'; c.fillRect(px, py, 4, ph);
+    c.fillStyle = 'rgba(0,0,0,.18)'; c.fillRect(px + 3, py, 1, ph);
+    c.fillStyle = 'rgba(0,0,0,.2)';
+    for (let y = py + 3; y < py + ph - 1; y += 3) c.fillRect(px, y, 4, 0.75);
+    c.strokeStyle = 'rgba(0,0,0,.45)'; c.strokeRect(px + 0.5, py + 0.5, 3, ph - 1);
+  }
   // head cabinet
   c.fillStyle = body; rrect(c, cx - 9, cy - 17, 18, 12, 3); c.fill();
   c.fillStyle = 'rgba(0,0,0,.25)'; c.fillRect(cx - 9, cy - 8, 18, 3);
@@ -961,7 +970,7 @@ function updatePlayer(dt) {
   if (!p.dx && !p.dy) {
     if (passable(p.x + wx, p.y + wy)) { p.dx = wx; p.dy = wy; } else return;
   }
-  let dist = playerSpeed() * dt;
+  let dist = GAME_SPEED * playerSpeed() * dt;
   while (dist > 0) {
     const rem = 1 - p.prog;
     if (dist < rem) { p.prog += dist; break; }
@@ -1041,7 +1050,7 @@ function updateTower(g, dt) {
     return;
   }
   if (!g.dx && !g.dy) chooseTower(g);
-  let dist = towerSpeed(g) * dt;
+  let dist = GAME_SPEED * towerSpeed(g) * dt;
   while (dist > 0 && (g.dx || g.dy)) {
     const rem = 1 - g.prog;
     if (dist < rem) { g.prog += dist; break; }
