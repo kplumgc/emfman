@@ -116,7 +116,11 @@
   .board td, .board th { padding: 0 8px; text-align: right; white-space: nowrap; }
   .board td.name, .board th.name { text-align: left; max-width: 20ch; overflow: hidden; text-overflow: ellipsis; }
   .board tr.me td { color: var(--lime); text-shadow: 0 0 8px rgba(200,218,44,.7); }
-  .board .empty { color: var(--muted); padding: 6px 0; }
+  .board tr.empty td { color: #3d4530; }
+  /* title screen: instructions and high scores share one cell sized to the larger, so nothing moves when they swap */
+  #titleInfo { display: grid; place-items: center; }
+  #titleInfo > * { grid-area: 1 / 1; }
+  #titleInfo > .off { visibility: hidden; }
   .board.compact { font-size: 9px; padding: 4px 12px 6px; margin: -6px 0; }
   .board.compact h3 { margin-bottom: 2px; }
   .board.compact table { line-height: 1.4; }
@@ -228,12 +232,14 @@
         <div class="choice" data-char="man"><canvas width="144" height="156" id="pickMan"></canvas>EMF MAN</div>
         <div class="choice" data-char="woman"><canvas width="144" height="156" id="pickWoman"></canvas>EMF WOMAN</div>
       </div>
-      <div class="legend">
-        <canvas width="36" height="36" id="lgDot"></canvas><span>EAT ALL THE DOTS</span>
-        <canvas width="36" height="36" id="lgHat"></canvas><span>FOIL HAT = PROTECTION TO ATTACK TOWERS</span>
-        <canvas width="36" height="36" id="lgTower"></canvas><span>TOWERS ZAP YOU. CLOSER = WORSE</span>
+      <div id="titleInfo">
+        <div class="legend">
+          <canvas width="36" height="36" id="lgDot"></canvas><span>EAT ALL THE DOTS</span>
+          <canvas width="36" height="36" id="lgHat"></canvas><span>FOIL HAT = PROTECTION TO ATTACK TOWERS</span>
+          <canvas width="36" height="36" id="lgTower"></canvas><span>TOWERS ZAP YOU. CLOSER = WORSE</span>
+        </div>
+        <div id="titleBoard" class="board compact off"></div>
       </div>
-      <div id="titleBoard" class="board compact hidden"></div>
       <p class="blink key-only">PRESS ENTER OR TAP TO START</p>
       <p class="keys key-only">ARROWS/WASD MOVE &middot; P PAUSE &middot; Q QUIT &middot; M MUTE &middot; L SCORES</p>
       <button class="btn big touch-only" id="startBtn">START</button>
@@ -969,13 +975,10 @@ const Board = (() => {
   }
 
   // Builds the table with textContent only, so player names are always plain text.
+  // Always 10 rows (empty places as dashes) so the panel never changes size.
   function render(el, highlightId) {
     el.replaceChildren();
     const h = document.createElement('h3'); h.textContent = 'HIGH SCORES'; el.appendChild(h);
-    if (!list || !list.length) {
-      const p = document.createElement('p'); p.className = 'empty'; p.textContent = 'NO SCORES YET. BE THE FIRST!';
-      el.appendChild(p); return;
-    }
     const table = document.createElement('table');
     const row = (cells, tag, cls) => {
       const tr = document.createElement('tr');
@@ -984,10 +987,14 @@ const Board = (() => {
       table.appendChild(tr);
     };
     row([['#'], ['NAME', 'name'], ['SCORE'], ['LV'], ['DATE']], 'th');
-    list.forEach((e, i) => row([
-      [String(i + 1)], [e.player_name, 'name'], [String(e.score)], [String(e.level)],
-      [new Date(e.created_at).toLocaleDateString('en-AU', DATE_FMT)],
-    ], 'td', e.id === highlightId ? 'me' : ''));
+    for (let i = 0; i < 10; i++) {
+      const e = list && list[i];
+      if (e) row([
+        [String(i + 1)], [e.player_name, 'name'], [String(e.score)], [String(e.level)],
+        [new Date(e.created_at).toLocaleDateString('en-AU', DATE_FMT)],
+      ], 'td', e.id === highlightId ? 'me' : '');
+      else row([[String(i + 1)], ['----------', 'name'], ['-----'], ['--'], ['--/--/----']], 'td', 'empty');
+    }
     el.appendChild(table);
   }
 
@@ -1008,7 +1015,9 @@ const Board = (() => {
 
   async function gameOver(finalScore, finalLevel) {
     pending = { score: finalScore, level: finalLevel };
-    setNaming(false); msg(''); showBoard();
+    // show nothing until the fresh board arrives, then the name box and board appear together
+    setNaming(false); msg('');
+    $('overBoard').classList.add('hidden'); $('over').classList.remove('with-board');
     await load();
     if (state !== 'over') return;
     if (!list) { if (finalScore > 0) msg('LEADERBOARD OFFLINE'); showBoard(); return; }
@@ -1575,9 +1584,10 @@ function showTitleInfo(board) {
   titleSwitchedAt = performance.now();
   titleShowsBoard = board && !!Board.list;
   if (titleShowsBoard) Board.render($('titleBoard'));
-  $('titleBoard').classList.toggle('hidden', !titleShowsBoard);
-  document.querySelector('#title .legend').classList.toggle('hidden', titleShowsBoard);
+  $('titleBoard').classList.toggle('off', !titleShowsBoard);
+  document.querySelector('#title .legend').classList.toggle('off', titleShowsBoard);
 }
+Board.render($('titleBoard'));   // empty 10-row board up front so its space is reserved from the start
 setInterval(() => {
   if (state === 'title' && performance.now() - titleSwitchedAt >= 6000) showTitleInfo(!titleShowsBoard);
 }, 500);
