@@ -237,6 +237,7 @@
           <canvas width="36" height="36" id="lgDot"></canvas><span>EAT ALL THE DOTS</span>
           <canvas width="36" height="36" id="lgHat"></canvas><span>FOIL HAT = PROTECTION TO ATTACK TOWERS</span>
           <canvas width="36" height="36" id="lgTower"></canvas><span>TOWERS ZAP YOU. CLOSER = WORSE</span>
+          <canvas width="36" height="36" id="lgDE"></canvas><span>DE FILTER = BONUS POINTS</span>
         </div>
         <div id="titleBoard" class="board compact off"></div>
       </div>
@@ -420,6 +421,7 @@ const Sound = (() => {
     toggleMute() { muted = !muted; if (master) master.gain.value = muted ? 0 : 0.5; return muted; },
     chomp() { chompAlt = !chompAlt; tone(chompAlt ? 660 : 470, 0.06, { to: chompAlt ? 470 : 660, vol: 0.07 }); },
     hat() { [523, 659, 784, 1047, 1319, 1568].forEach((f, i) => tone(f, 0.12, { when: i * 0.055, vol: 0.1 })); },
+    bonus() { [880, 1175, 880, 1760].forEach((f, i) => tone(f, 0.07, { when: i * 0.06, to: f * 1.2, vol: 0.09 })); },
     zap(i) {
       noise(0.05 + 0.1 * i, { vol: 0.12 + 0.3 * i, freq: 2200 + Math.random() * 3500, q: 0.7 });
       tone(900 + 900 * i, 0.08 + 0.05 * i, { to: 70, type: 'sawtooth', vol: 0.05 + 0.1 * i });
@@ -571,6 +573,51 @@ const PORTRAITS = {
     ],
   },
 };
+// Bonus item (the arcade "fruit"): a dirty electricity filter, 24x24 pixels
+const DE_FILTER = {
+  pal: { K: '#1c231b', W: '#f1f3ee', g: '#b9c0b6', D: '#0f1d0e', R: '#ff5a3c', L: '#c6e03a', G: '#7dff4f', l: '#9bb82a', P: '#d4bc3c', p: '#8f7d22' },
+  rows: [
+    '........................',
+    '........................',
+    '....KKKKKKKKKKKKKKKK....',
+    '...KWWWWWWWWWWWWWWWgK...',
+    '...KWWWWWWWWWWWWWWWgK...',
+    '...KWKKKKKKKKKKKKKKgK...',
+    '...KWKDDDDDDDDDDDDKgK...',
+    '...KWKDRDDRDDDLLDDKgK...',
+    '...KWKDRDRRDDLDDLDKgK...',
+    '...KWKRDRRDRLDDDDLKgK...',
+    '...KWKRDRDDRDDDDDDKgK...',
+    '...KWKDDDDDDDDDDDDKgK...',
+    '...KWKKKKKKKKKKKKKKgK...',
+    '...KWWWWWWWWWWWWWWWgK...',
+    '...KWWGGWWllllllllWgK...',
+    '...KWWGGWWllllllllWgK...',
+    '...KggggggggggggggggK...',
+    '....KKKKKKKKKKKKKKKK....',
+    '........Pp....Pp........',
+    '........Pp....Pp........',
+    '........Pp....Pp........',
+    '........Pp....Pp........',
+    '........Pp....Pp........',
+    '........................',
+  ],
+};
+let deFilterImg = null;
+function drawDEFilter(c, cx, cy, size) {
+  if (!deFilterImg) {
+    deFilterImg = document.createElement('canvas'); deFilterImg.width = deFilterImg.height = 24;
+    const g = deFilterImg.getContext('2d');
+    DE_FILTER.rows.forEach((r, y) => [...r].forEach((p, x) => {
+      if (p === '.') return;
+      g.fillStyle = DE_FILTER.pal[p]; g.fillRect(x, y, 1, 1);
+    }));
+  }
+  c.save(); c.imageSmoothingEnabled = false;
+  c.drawImage(deFilterImg, cx - size / 2, cy - size / 2, size, size);
+  c.restore();
+}
+
 function drawPortrait(c, key) {
   const { pal, rows } = PORTRAITS[key], g = c.getContext('2d'), px = c.width / 24;
   g.clearRect(0, 0, c.width, c.height);
@@ -815,6 +862,11 @@ function drawDot(c, cx, cy, r = 3) { c.fillStyle = DOT_COLOR; c.fillRect(cx - r,
 
 // ===================== Maze =====================
 let grid, pel, pelletsLeft;
+// bonus DE filter: shows up twice a level, below the tower house, like the arcade fruit
+let pelletsTotal = 0, bonus = null, bonusSpawned = 0;
+const BONUS_AT = [0.3, 0.7];                       // fraction of dots eaten when each one appears
+const BONUS_POS = [14 * T, 17.5 * T];             // pixels: corridor under the tower house
+const BONUS_PTS = [100, 300, 500, 500, 700, 700, 1000, 1000, 2000, 2000, 3000, 3000, 5000];
 function tileAt(x, y) {
   if (y < 0 || y >= ROWS) return '#';
   return grid[y][((x % COLS) + COLS) % COLS];
@@ -838,6 +890,7 @@ function buildMaze() {
       if (pel[y][x]) { pelletsLeft++; grid[y][x] = ' '; }
     }
   }
+  pelletsTotal = pelletsLeft; bonus = null; bonusSpawned = 0;
   // tiles unreachable from the start are void (drawn as nothing)
   const seen = new Set([START.join()]), q = [START];
   while (q.length) {
@@ -909,7 +962,7 @@ function resetRound() {
   towers[0].dx = -1;
   levelTime = 0; modePhase = 0; modeTimer = 0; hatTimer = 0; combo = 200;
   zapTimer = 0.5; contactTimer = 0; flicker = 0; shake = 0; intensity = 0; outer = 0; nearestTower = null;
-  bolts = []; popups = [];
+  bolts = []; popups = []; bonus = null;
   Sound.humStop();
 }
 
@@ -1163,6 +1216,24 @@ function eat(x, y) {
   }
 }
 
+function updateBonus(dt) {
+  const eaten = pelletsTotal - pelletsLeft;
+  if (!bonus && bonusSpawned < BONUS_AT.length && eaten >= BONUS_AT[bonusSpawned] * pelletsTotal) {
+    bonusSpawned++;
+    bonus = { t: 9 + Math.random(), pts: BONUS_PTS[Math.min(level, BONUS_PTS.length) - 1] };
+  }
+  if (!bonus) return;
+  bonus.t -= dt;
+  if (bonus.t <= 0) { bonus = null; return; }
+  const [px, py] = playerPx();
+  if (Math.hypot(px - BONUS_POS[0], py - BONUS_POS[1]) < 0.6 * T) {
+    addScore(bonus.pts); Sound.bonus();
+    popups.push({ x: BONUS_POS[0], y: BONUS_POS[1] - 10, text: String(bonus.pts), life: 1.5 });
+    for (let i = 0; i < 20; i++) spark(BONUS_POS[0], BONUS_POS[1], ['#ffffff', LIME, '#7dff4f'], 130);
+    bonus = null;
+  }
+}
+
 function towerTarget(g) {
   const p = player, pdx = p.dx || p.face, pdy = p.dy;
   if (modePhase % 2 === 0) return CORNERS[g.idx];
@@ -1387,7 +1458,10 @@ function updatePlay(dt) {
   }
   if (geigerNext < 0) geigerNext = 0.01;
 
+  updateBonus(dt);
+
   if (pelletsLeft <= 0) {
+    bonus = null;
     state = 'clear'; clearTimer = 2.4; Sound.humStop(); Sound.clear(); intensity = 0;
     addScore(500 * level);
   }
@@ -1414,6 +1488,14 @@ function draw() {
       const pulse = 1 + Math.sin(time * 6) * 0.08;
       ctx.save(); ctx.shadowColor = '#ffffff'; ctx.shadowBlur = 10 + Math.sin(time * 6) * 4;
       drawFoilHat(ctx, cx, cy + 3, 1.25 * pulse, time + x);
+      ctx.restore();
+    }
+  }
+  if (bonus) {
+    // blinks for its last 2 seconds so the player knows it's about to go
+    if (bonus.t > 2 || Math.floor(time * 8) % 2 === 0) {
+      ctx.save(); ctx.shadowColor = LIME; ctx.shadowBlur = 8 + Math.sin(time * 5) * 3;
+      drawDEFilter(ctx, BONUS_POS[0], BONUS_POS[1] + Math.sin(time * 4) * 1.5, 26);
       ctx.restore();
     }
   }
@@ -1577,6 +1659,7 @@ function drawTitleArt() {
   drawSignal(g, 0, -18, '#ff3b3b', time, 0, 1);
   drawTower(g, 0, 0, { t: time, idx: 0, color: '#ff3b3b', lookX: Math.sin(time), lookY: 0 });
   g.restore();
+  g = $('lgDE').getContext('2d'); g.clearRect(0, 0, 36, 36); drawDEFilter(g, 18, 18, 36);
 }
 // attract mode: the title screen alternates between the instructions and the high scores
 let titleShowsBoard = false, titleSwitchedAt = 0;
